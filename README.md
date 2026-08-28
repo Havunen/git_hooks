@@ -1,23 +1,26 @@
-# Long-running Git hooks example
+# Git hooks example catalog
 
-This repository demonstrates foreground tasks in Git's `pre-commit` and
-`post-commit` hooks. The tasks are deliberately simulated with timed waits so
-the behavior is predictable and does not require any external dependencies.
+This repository contains runnable examples for all 28 hook types documented by
+Git 2.55. Most examples observe their inputs and append a record under
+`.git/hook-example-logs/`. The `pre-commit` and `post-commit` examples also run
+deliberately slow foreground tasks so their effect on `git commit` is easy to
+see.
 
-## Enable the hooks
+See [docs/HOOKS.md](docs/HOOKS.md) for the complete hook-by-hook catalog.
 
-Git does not enable version-controlled hooks automatically after a clone. Run:
+## Enable the local hooks
+
+Git intentionally does not enable version-controlled hooks after a clone. Run:
 
 ```sh
 ./scripts/install-hooks.sh
 ```
 
 The installer sets this repository's local `core.hooksPath` to `.githooks`.
-It does not modify global Git configuration.
+It does not modify global Git configuration and it does not install anything
+on a remote Git server.
 
-## Try it
-
-Change and commit `demo.txt`:
+## Try the commit hooks
 
 ```sh
 printf '\nAnother line\n' >> demo.txt
@@ -25,13 +28,13 @@ git add demo.txt
 git commit -m "Run the hook demo"
 ```
 
-The pre-commit hook runs these tasks before Git creates the commit:
+The pre-commit hook runs three tasks before Git creates the commit:
 
 1. `scan-staged-files`
 2. `run-linter`
 3. `run-tests`
 
-The post-commit hook then runs these tasks after Git creates the commit:
+The post-commit hook then runs three tasks after Git creates the commit:
 
 1. `generate-commit-report`
 2. `refresh-cache`
@@ -39,59 +42,119 @@ The post-commit hook then runs these tasks after Git creates the commit:
 
 Every task waits for three seconds by default, so a successful commit takes
 about 18 seconds. Both hooks run in the foreground on purpose: the terminal
-continues to show progress and `git commit` does not return until the hooks are
-finished.
+shows progress and `git commit` does not return until they finish. Their
+detailed output is stored under `.git/hook-task-logs/`.
 
-Hook output is also appended to files under `.git/hook-task-logs/`.
+Use zero-second tasks when exploring the other examples:
 
-## Configuration
+```sh
+HOOK_TASK_DELAY_SECONDS=0 git commit -m "Fast hook example"
+```
 
-Environment variables make the example easier to experiment with:
+## Opt-in behavior examples
+
+The examples only log and allow operations by default. Environment variables
+enable mutations or rejection for one command:
 
 | Variable | Effect |
 | --- | --- |
-| `HOOK_TASK_DELAY_SECONDS` | Sets the wait per task for both hooks. |
+| `HOOK_DEMO_REJECT=pre-push` | Makes the named hook reject its operation; `all` targets every rejectable hook. |
+| `HOOK_DEMO_REJECT_WIP=1` | Rejects WIP commit, patch, and P4 changelist subjects. |
+| `HOOK_DEMO_REQUIRE_PREFIX=ABC-` | Requires commit subjects to begin with the value. |
+| `HOOK_DEMO_TICKET=ABC-123` | Prefixes commit or P4 changelist messages in their prepare hook. |
+| `HOOK_DEMO_PROTECTED_BRANCH=main` | Prevents `pre-rebase` from rebasing that branch. |
+| `HOOK_DEMO_REQUIRE_EMAIL_SUBJECT=1` | Rejects a patch email without a Subject header. |
+| `HOOK_DEMO_QUIET=1` | Writes example logs without printing human-readable notices. |
+| `HOOK_DEMO_LOG_DIR=/path` | Overrides the example log directory. |
+| `SKIP_LONG_HOOKS=1` | Skips the simulated pre/post-commit tasks. |
+
+Long-task timing has more granular controls:
+
+| Variable | Effect |
+| --- | --- |
+| `HOOK_TASK_DELAY_SECONDS` | Sets the wait per task for both commit hooks. |
 | `PRE_COMMIT_TASK_DELAY_SECONDS` | Overrides the wait per pre-commit task. |
 | `POST_COMMIT_TASK_DELAY_SECONDS` | Overrides the wait per post-commit task. |
-| `PRE_COMMIT_FAIL_TASK` | Makes the named pre-commit task fail. |
-| `POST_COMMIT_FAIL_TASK` | Makes the named post-commit task fail. |
-| `SKIP_LONG_HOOKS=1` | Skips all simulated tasks. |
+| `PRE_COMMIT_FAIL_TASK` | Fails one named pre-commit task. |
+| `POST_COMMIT_FAIL_TASK` | Fails one named post-commit task. |
 
-For example, this makes the pre-commit test task fail after running the prior
-tasks:
+Examples:
 
 ```sh
-PRE_COMMIT_FAIL_TASK=run-tests git commit -m "Blocked example"
+# commit-msg rejects this before Git writes the commit
+HOOK_TASK_DELAY_SECONDS=0 HOOK_DEMO_REJECT_WIP=1 \
+  git commit -m "WIP experiment"
+
+# prepare-commit-msg changes the resulting subject to [ABC-123] Fix parser
+HOOK_TASK_DELAY_SECONDS=0 HOOK_DEMO_TICKET=ABC-123 \
+  git commit -m "Fix parser"
+
+# pre-push consumes and logs every proposed ref update, then rejects the push
+HOOK_DEMO_REJECT=pre-push git push origin main
 ```
 
-The commit is rejected because a pre-commit hook is a quality gate. In
-contrast, forcing `POST_COMMIT_FAIL_TASK=refresh-cache` reports an error after
-the commit already exists; a post-commit hook cannot roll it back.
+`git commit --no-verify` bypasses `pre-commit` and `commit-msg`, but not every
+commit-related hook. In particular, `prepare-commit-msg` is still invoked.
 
-Use a shorter delay while developing the hook scripts:
+## Client versus server hooks
+
+The installer enables hooks only in this working repository. These local hooks
+can run here:
+
+- commit, patch, merge, rebase, checkout, rewrite, index, and maintenance hooks;
+- `pre-push`, before data leaves this repository;
+- email and Git-P4 hooks when their corresponding Git commands are used.
+
+The receive hooks (`pre-receive`, `update`, `proc-receive`, `post-receive`,
+`post-update`, and usually `push-to-checkout`) run in the receiving repository.
+To experiment with them, create a disposable bare remote and install the whole
+`.githooks` directory there:
 
 ```sh
-HOOK_TASK_DELAY_SECONDS=1 git commit -m "Fast example"
+git init --bare /tmp/hook-demo-remote.git
+cp -R .githooks /tmp/hook-demo-remote.git/.githooks
+git -C /tmp/hook-demo-remote.git config core.hooksPath .githooks
+git remote add hook-demo /tmp/hook-demo-remote.git
+git push hook-demo HEAD:refs/heads/main
 ```
 
-To bypass the simulated tasks for one invocation, set `SKIP_LONG_HOOKS=1`.
-Git's `git commit --no-verify` also bypasses the pre-commit hook, but it is not
-a general switch for post-commit processing.
+The receive hooks share only files inside `.githooks`, so copying that directory
+is sufficient. Real server hooks should be deployed and secured by the server
+administrator rather than copied ad hoc.
 
-## Test the example
+## Protocol-specific examples
+
+`proc-receive` uses a binary pkt-line protocol rather than ordinary lines. Its
+Python 3 example negotiates protocol version 1, logs each command, and responds
+with `option fall-through`, leaving the actual ref update to `receive-pack`.
+It runs only when a server administrator configures `receive.procReceiveRefs`.
+
+`fsmonitor-watchman` must emit NUL-delimited output and therefore never prints
+human-readable messages on stdout. This educational implementation returns `/`,
+which safely tells Git to inspect everything. It demonstrates the protocol but
+does not improve performance. Try version 2 without changing local config:
+
+```sh
+git -c core.fsmonitor=.githooks/fsmonitor-watchman \
+  -c core.fsmonitorHookVersion=2 status
+```
+
+## Test the examples
 
 ```sh
 make test
+make lint
 ```
 
-The integration test creates a temporary repository, enables the hooks, and
-checks successful commits, pre-commit rejection, and post-commit failure
-semantics with zero-second delays.
+The integration test verifies the complete executable hook set, commit success
+and rejection, message mutation, checkout callbacks, client-side push handling,
+server-side receive handling in a bare repository, `proc-receive` fall-through,
+and the fsmonitor wire format. `make lint` additionally runs ShellCheck and a
+Python syntax check.
 
-## Adapting it
+## Adapting the examples
 
-Replace the simulated loop in `scripts/run-hook-tasks.sh` with real commands
-such as a formatter, test suite, generated-file refresh, or local notification.
-Keep critical checks in pre-commit. Put best-effort follow-up work in
-post-commit, remembering that the commit has already been written at that
-point.
+Replace simulated waits in `scripts/run-hook-tasks.sh` with real formatters or
+tests. Replace logging bodies in the other hook files with project-specific
+work. Keep fast, critical checks in hooks that can reject an operation; use
+post-operation hooks for best-effort notifications and cache refreshes.
