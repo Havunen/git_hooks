@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+upstream="${1:-unspecified}"
+branch="${2:-$(git symbolic-ref --quiet --short HEAD 2>/dev/null || printf 'detached-HEAD')}"
+hook_log "requested rebase; upstream=$upstream branch=$branch"
+
+if [[ -n "${HOOK_DEMO_PROTECTED_BRANCH:-}" && \
+      "$branch" == "$HOOK_DEMO_PROTECTED_BRANCH" ]]; then
+  hook_reject "branch $branch is protected from rebasing"
+fi
+
+hook_maybe_reject

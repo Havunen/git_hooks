@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+update_count=0
+while read -r old_oid new_oid ref_name; do
+  ((update_count += 1))
+  hook_log "updated[$update_count] $ref_name $old_oid -> $new_oid"
+done
+
+hook_log "server completed $update_count ref update(s); notification example"

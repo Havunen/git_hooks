@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 1 ]] || hook_reject 'expected the P4 changelist file argument'
+changelist_file="$1"
+hook_log "P4 changelist prepared at $(hook_quote "$changelist_file")"
+
+# Opt-in mutation example, parallel to prepare-commit-msg.
+if [[ -n "${HOOK_DEMO_TICKET:-}" ]]; then
+  ticket="${HOOK_DEMO_TICKET//$'\n'/ }"
+  temporary_file="$changelist_file.hook-demo.$$"
+  trap 'rm -f -- "$temporary_file"' EXIT
+  {
+    printf '[%s] ' "$ticket"
+    cat -- "$changelist_file"
+  } >"$temporary_file"
+  mv -- "$temporary_file" "$changelist_file"
+  trap - EXIT
+  hook_log "prefixed the P4 changelist with ticket $ticket"
+fi
+
+hook_maybe_reject

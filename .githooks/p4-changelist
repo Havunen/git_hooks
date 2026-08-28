@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 1 ]] || hook_reject 'expected the P4 changelist file argument'
+changelist_file="$1"
+subject="$(sed -n '1p' "$changelist_file")"
+hook_log "validating edited P4 changelist; subject=$subject"
+
+if [[ "${HOOK_DEMO_REJECT_WIP:-0}" == 1 && "$subject" == WIP* ]]; then
+  hook_reject 'P4 changelists beginning with WIP are disabled for this demo'
+fi
+
+hook_maybe_reject

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 3 ]] || hook_reject 'expected old HEAD, new HEAD, and branch flag'
+old_head="$1"
+new_head="$2"
+branch_checkout="$3"
+
+hook_log "checkout completed; old=$old_head new=$new_head branch-checkout=$branch_checkout"

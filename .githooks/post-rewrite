@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -ge 1 ]] || hook_reject 'expected the rewrite command argument'
+rewrite_command="$1"
+rewrite_count=0
+
+while read -r old_oid new_oid extra_info; do
+  ((rewrite_count += 1))
+  hook_log "rewrite[$rewrite_count] command=$rewrite_command $old_oid -> $new_oid extra=${extra_info:-none}"
+done
+
+hook_log "observed $rewrite_count rewritten commit(s)"

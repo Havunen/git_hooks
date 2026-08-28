@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+staged_count="$(git diff --cached --name-only | sed '/^$/d' | wc -l)"
+staged_count="${staged_count//[[:space:]]/}"
+hook_log "inspecting the applied patch; staged-files=$staged_count"
+hook_maybe_reject

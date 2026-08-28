@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Minimal proc-receive v1 hook that logs and delegates each update to Git.
+
+Unlike ordinary hooks, proc-receive exchanges binary-safe pkt-line messages on
+stdin/stdout. The `option fall-through` response tells receive-pack to perform
+the normal ref update after this hook has observed it.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import os
+import pathlib
+import subprocess
+import sys
+
+
+HOOK_NAME = "proc-receive"
+
+
+def read_exact(length: int) -> bytes:
+    chunks: list[bytes] = []
+    remaining = length
+    while remaining:
+        chunk = sys.stdin.buffer.read(remaining)
+        if not chunk:
+            raise EOFError("unexpected EOF in pkt-line")
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def read_packet() -> bytes | None:
+    header = sys.stdin.buffer.read(4)
+    if not header:
+        return None
+    if len(header) != 4:
+        raise ValueError("truncated pkt-line header")
+    length = int(header, 16)
+    if length == 0:
+        return b""
+    if length < 4:
+        raise ValueError(f"invalid pkt-line length: {length}")
+    return read_exact(length - 4)
+
+
+def read_section() -> list[bytes]:
+    packets: list[bytes] = []
+    while True:
+        packet = read_packet()
+        if packet is None:
+            raise EOFError("unexpected EOF before pkt-line flush")
+        if packet == b"":
+            return packets
+        packets.append(packet.rstrip(b"\n"))
+
+
+def write_packet(payload: bytes) -> None:
+    length = len(payload) + 4
+    sys.stdout.buffer.write(f"{length:04x}".encode("ascii") + payload)
+
+
+def write_flush() -> None:
+    sys.stdout.buffer.write(b"0000")
+    sys.stdout.buffer.flush()
+
+
+def git_dir() -> pathlib.Path:
+    configured = os.environ.get("HOOK_DEMO_LOG_DIR")
+    if configured:
+        return pathlib.Path(configured)
+    result = subprocess.run(
+        ["git", "rev-parse", "--absolute-git-dir"],
+        check=True,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    return pathlib.Path(result.stdout.strip()) / "hook-example-logs"
+
+
+def log(message: str) -> None:
+    log_dir = git_dir()
+    log_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    line = f"[{timestamp}] [{HOOK_NAME}] {message}\n"
+    with (log_dir / f"{HOOK_NAME}.log").open("a", encoding="utf-8") as stream:
+        stream.write(line)
+    if os.environ.get("HOOK_DEMO_QUIET") != "1":
+        print(f"[hook-demo:{HOOK_NAME}] {message}", file=sys.stderr)
+
+
+def main() -> int:
+    negotiation = read_section()
+    if not negotiation or not negotiation[0].startswith(b"version=1"):
+        raise ValueError("proc-receive requires protocol version 1")
+
+    # This example does not opt into push-options, so receive-pack will not
+    # send the optional push-options section.
+    write_packet(b"version=1\0\n")
+    write_flush()
+
+    commands = read_section()
+    parsed_commands: list[tuple[str, str, str]] = []
+    for command in commands:
+        old_oid, new_oid, ref_name = command.decode("utf-8", "surrogateescape").split(" ", 2)
+        parsed_commands.append((old_oid, new_oid, ref_name))
+        log(f"observed {ref_name} {old_oid} -> {new_oid}")
+
+    reject = os.environ.get("HOOK_DEMO_REJECT") in {"all", HOOK_NAME}
+    for _old_oid, _new_oid, ref_name in parsed_commands:
+        if reject:
+            write_packet(f"ng {ref_name} requested by HOOK_DEMO_REJECT\n".encode())
+        else:
+            write_packet(f"ok {ref_name}\n".encode())
+            write_packet(b"option fall-through\n")
+    write_flush()
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except (EOFError, OSError, UnicodeError, ValueError) as error:
+        print(f"proc-receive example failed: {error}", file=sys.stderr)
+        raise SystemExit(1) from error

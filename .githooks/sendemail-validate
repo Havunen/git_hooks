@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 2 ]] || hook_reject 'expected message-content and SMTP-header files'
+message_file="$1"
+headers_file="$2"
+subject="$(sed -n 's/^[Ss]ubject:[[:space:]]*//p' "$headers_file" | sed -n '1p')"
+
+hook_log "validating outgoing patch email; subject=$subject content=$(hook_quote "$message_file")"
+
+if [[ "${HOOK_DEMO_REQUIRE_EMAIL_SUBJECT:-0}" == 1 && -z "$subject" ]]; then
+  hook_reject 'outgoing patch email has no Subject header'
+fi
+
+hook_maybe_reject

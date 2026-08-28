@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOOK_DEMO_NAME=fsmonitor-watchman
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+if [[ $# -ne 2 ]]; then
+  hook_log_only "expected version and previous-token arguments; got $#"
+  exit 2
+fi
+
+version="$1"
+previous_token="$2"
+
+# This correctness-first example reports a full invalidation (`/`) rather than
+# talking to Watchman. It demonstrates the wire format without risking missed
+# changes. Nothing except the NUL-delimited protocol is written to stdout.
+case "$version" in
+  1)
+    hook_log_only "v1 query since $previous_token; returning full invalidation"
+    printf '/\0'
+    ;;
+  2)
+    token="hook-demo-$(date +%s%N)"
+    hook_log_only "v2 query since $previous_token; token=$token; returning full invalidation"
+    printf '%s\0/\0' "$token"
+    ;;
+  *)
+    hook_log_only "unsupported protocol version $version"
+    exit 1
+    ;;
+esac

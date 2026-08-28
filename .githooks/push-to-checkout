@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 1 ]] || hook_reject 'expected the new commit argument'
+new_commit="$1"
+hook_log "checking whether the worktree can be updated to $new_commit"
+hook_maybe_reject
+
+# This mirrors Git's documented updateInstead behavior while preserving local
+# changes that do not overlap the incoming update.
+git read-tree -u -m HEAD "$new_commit"
+hook_log "worktree and index updated to $new_commit"

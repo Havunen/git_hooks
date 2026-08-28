@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 2 ]] || hook_reject 'expected worktree-updated and skip-worktree flags'
+worktree_updated="$1"
+skip_worktree_may_have_changed="$2"
+
+hook_log "index written; worktree-updated=$worktree_updated skip-worktree-may-have-changed=$skip_worktree_may_have_changed"

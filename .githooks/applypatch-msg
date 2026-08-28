@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 1 ]] || hook_reject 'expected the commit-message file argument'
+message_file="$1"
+subject="$(sed -n '1p' "$message_file")"
+
+hook_log "checking patch message $(hook_quote "$message_file"); subject=$subject"
+
+if [[ "${HOOK_DEMO_REJECT_WIP:-0}" == 1 && "$subject" == WIP* ]]; then
+  hook_reject 'patch subjects beginning with WIP are disabled for this demo'
+fi
+
+hook_maybe_reject

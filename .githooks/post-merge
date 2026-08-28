@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 1 ]] || hook_reject 'expected the squash-merge flag'
+hook_log "merge completed; squash=$1; restore metadata or dependencies here"

@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -ge 1 ]] || hook_reject 'expected the commit-message file argument'
+message_file="$1"
+message_source="${2:-unspecified}"
+source_commit="${3:-none}"
+
+hook_log "message-file=$(hook_quote "$message_file") source=$message_source source-commit=$source_commit"
+
+# Opt-in mutation example: HOOK_DEMO_TICKET=DEMO-123 prefixes the subject.
+if [[ -n "${HOOK_DEMO_TICKET:-}" ]]; then
+  ticket="${HOOK_DEMO_TICKET//$'\n'/ }"
+  temporary_file="$message_file.hook-demo.$$"
+  trap 'rm -f -- "$temporary_file"' EXIT
+  {
+    printf '[%s] ' "$ticket"
+    cat -- "$message_file"
+  } >"$temporary_file"
+  mv -- "$temporary_file" "$message_file"
+  trap - EXIT
+  hook_log "prefixed the message with ticket $ticket"
+fi
+
+hook_maybe_reject

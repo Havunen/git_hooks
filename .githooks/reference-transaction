@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$hook_dir/lib/common.sh"
+
+[[ $# -eq 1 ]] || hook_reject 'expected the reference transaction state'
+transaction_state="$1"
+update_count=0
+
+while read -r old_value new_value ref_name; do
+  ((update_count += 1))
+  hook_log "${transaction_state}[$update_count] $ref_name $old_value -> $new_value"
+done
+
+hook_log "state=$transaction_state updates=$update_count"
+
+# Only the preparing/prepared states can abort the transaction.
+if [[ "$transaction_state" == preparing || "$transaction_state" == prepared ]]; then
+  hook_maybe_reject
+fi
