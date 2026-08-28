@@ -1,0 +1,3 @@
+# The demo writes logs inside .git, but ignore these if the runner is adapted
+# to write them into the working tree.
+hook-task-logs/
