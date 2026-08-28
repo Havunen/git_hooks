@@ -1,2 +1,2 @@
 Edit this file, stage it, and commit it to run the hook demo.
-dsa2 fd 33 4
+dsa2 fd 33
